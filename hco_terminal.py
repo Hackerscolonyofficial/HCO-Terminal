@@ -32,18 +32,18 @@ app = Flask(__name__)
 # Store active processes
 active_processes = {}
 
-HTML = f"""<!doctype html>
+HTML = '''<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>{APP_NAME} — Hackers Colony Portal</title>
+<title>''' + APP_NAME + ''' — Hackers Colony Portal</title>
 <link rel="icon" href="data:,">
 <style>
   /* Reset */
-  *{{box-sizing:border-box;margin:0;padding:0}}
-  html,body{{height:100%}}
-  body {{
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body {
     font-family: Inter, "Segoe UI", Roboto, system-ui, -apple-system, sans-serif;
     background: radial-gradient(1200px 600px at 10% 10%, #07102a 0%, #02020a 35%, #000 100%);
     color:#e6eef6;
@@ -52,9 +52,9 @@ HTML = f"""<!doctype html>
     align-items:center;
     justify-content:center;
     padding:24px;
-  }}
+  }
 
-  .panel {{
+  .panel {
     width:100%;
     max-width:980px;
     border-radius:16px;
@@ -62,59 +62,59 @@ HTML = f"""<!doctype html>
     background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
     box-shadow: 0 10px 40px rgba(2,6,23,0.7), inset 0 1px 0 rgba(255,255,255,0.02);
     backdrop-filter: blur(6px);
-  }}
+  }
 
-  .top {{
+  .top {
     display:flex;
     align-items:center;
     gap:18px;
-  }}
-  .badge {{
+  }
+  .badge {
     width:72px;height:72px;border-radius:14px;
     display:flex;align-items:center;justify-content:center;
     background: linear-gradient(135deg,#09182b,#05283a);
     box-shadow: 0 6px 20px rgba(0,170,150,0.08);
     position:relative;
     overflow:hidden;
-  }}
-  .badge:after{{
+  }
+  .badge:after{
     content:"";
     position:absolute;left:-30px;top:-20px;width:140px;height:140px;
     background:radial-gradient(circle at 30% 30%, rgba(0,255,170,0.06), transparent 30%);
     transform:rotate(20deg);
-  }}
-  .logo-text{{font-weight:800;color:#00ffd6;font-size:20px;text-shadow:0 0 8px rgba(0,255,214,0.06)}}
+  }
+  .logo-text{font-weight:800;color:#00ffd6;font-size:20px;text-shadow:0 0 8px rgba(0,255,214,0.06)}
 
-  h1{{font-size:20px;color:#00ffd6;margin:0}}
-  p.lead{{color:#9fb3c2;margin-top:6px}}
+  h1{font-size:20px;color:#00ffd6;margin:0}
+  p.lead{color:#9fb3c2;margin-top:6px}
 
-  .grid {{
+  .grid {
     display:grid;
     grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
     gap:14px;
     margin-top:20px;
-  }}
+  }
 
-  .card {{
+  .card {
     background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
     padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.02);
     transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
     cursor:pointer;
-  }}
-  .card:hover{{ transform: translateY(-6px); box-shadow: 0 12px 30px rgba(0,255,180,0.06); background: rgba(255,255,255,0.03)}}
-  .card h3{{margin-bottom:8px;color:#e8fffb}}
-  .card p{{color:#9fb3c2;font-size:14px;line-height:1.45}}
+  }
+  .card:hover{ transform: translateY(-6px); box-shadow: 0 12px 30px rgba(0,255,180,0.06); background: rgba(255,255,255,0.03)}
+  .card h3{margin-bottom:8px;color:#e8fffb}
+  .card p{color:#9fb3c2;font-size:14px;line-height:1.45}
 
-  .cta-row{{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px;align-items:center}}
-  .btn {{
+  .cta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px;align-items:center}
+  .btn {
     display:inline-flex;align-items:center;gap:8px;
     padding:12px 16px;border-radius:12px;text-decoration:none;
     font-weight:700;color:#071025;background:#00ffd6;border:none;cursor:pointer;
     box-shadow:0 10px 30px rgba(0,255,214,0.06);
     transition: transform .14s ease, box-shadow .14s ease, opacity .14s;
-  }}
-  .btn.ghost{{background:transparent;color:#9fb3c2;border:1px solid rgba(255,255,255,0.03)}}
-  .btn:hover{{transform:translateY(-4px)}}
+  }
+  .btn.ghost{background:transparent;color:#9fb3c2;border:1px solid rgba(255,255,255,0.03)}
+  .btn:hover{transform:translateY(-4px)}
 
   .links { margin-top:18px; display:flex; gap:10px; flex-wrap:wrap; }
   .links a { text-decoration:none; padding:10px 12px; border-radius:10px; background: rgba(255,255,255,0.02); color:#cfeeea; font-weight:700; }
@@ -122,14 +122,14 @@ HTML = f"""<!doctype html>
   footer { margin-top:22px; color:#7f9aa3; font-size:13px; text-align:center; }
 
   /* floating glow */
-  .glow {{
+  .glow {
     position:absolute;right:28px;top:28px;width:220px;height:220px;border-radius:50%;
     filter: blur(60px); opacity:0.25; background: radial-gradient(circle,#00ffd6 0%, transparent 40%);
     transform: translateZ(0);
-  }}
+  }
 
   /* Terminal output */
-  .terminal {{
+  .terminal {
     background: #0a0e1a;
     border: 1px solid rgba(0,255,214,0.1);
     border-radius: 8px;
@@ -141,21 +141,21 @@ HTML = f"""<!doctype html>
     max-height: 300px;
     overflow-y: auto;
     white-space: pre-wrap;
-  }}
+  }
 
-  .status {{
+  .status {
     padding: 8px 12px;
     border-radius: 6px;
     margin: 10px 0;
     font-size: 14px;
-  }}
-  .status.running {{ background: rgba(0,255,214,0.1); color: #00ffd6; }}
-  .status.stopped {{ background: rgba(255,0,0,0.1); color: #ff4444; }}
+  }
+  .status.running { background: rgba(0,255,214,0.1); color: #00ffd6; }
+  .status.stopped { background: rgba(255,0,0,0.1); color: #ff4444; }
 
-  @media (max-width:560px) {{
-    .top {{flex-direction:row;gap:12px}}
-    .badge{{width:56px;height:56px}}
-  }}
+  @media (max-width:560px) {
+    .top {flex-direction:row;gap:12px}
+    .badge{width:56px;height:56px}
+  }
 </style>
 </head>
 <body>
@@ -201,7 +201,7 @@ HTML = f"""<!doctype html>
         <a class="btn" href="/join/telegram" target="_blank">Join Telegram</a>
         <a class="btn" href="/join/whatsapp" target="_blank" style="background:#25D366;color:#02120b">Join WhatsApp</a>
         <a class="btn ghost" href="/join/youtube" target="_blank">Watch Tutorials</a>
-        <a class="btn ghost" href="{WEBSITE_LINK}" target="_blank">Official Website</a>
+        <a class="btn ghost" href="''' + WEBSITE_LINK + '''" target="_blank">Official Website</a>
       </div>
 
       <div class="links">
@@ -217,11 +217,10 @@ HTML = f"""<!doctype html>
   // tiny animation: pulse glow
   const glow = document.querySelector('.glow');
   let tick = 0;
-  setInterval(()=>{{ tick += 0.02; glow.style.opacity = 0.18 + Math.sin(tick)*0.03; }}, 50);
+  setInterval(()=>{ tick += 0.02; glow.style.opacity = 0.18 + Math.sin(tick)*0.03; }, 50);
 </script>
 </body>
-</html>
-"""
+</html>'''
 
 # ---------- Utility Functions ----------
 def check_tool_installed(tool_name):
