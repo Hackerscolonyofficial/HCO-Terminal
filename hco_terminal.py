@@ -1,335 +1,302 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-HCO Terminal (single-file) — v1.2
-Author: Azhar (Hackers Colony)
-Filename: hco_terminal.py
-
-Improvements in v1.2:
- - Join links use redirect endpoints (/join/telegram, /join/whatsapp, /join/youtube)
- - Join clicks are logged to join_clicks.log
- - Pages contain more actionable items (buttons, sample commands, downloadable cheat-sheet)
- - All in a single file for GitHub
-
-Usage (Termux):
-    pkg update && pkg install python
-    pip install flask
-    python3 hco_terminal.py
+HCO Terminal — Neon Portal (single-file)
+Author: Azhar | Hackers Colony
+Run (Termux):
+  pkg update -y
+  pkg install python -y
+  pip install flask
+  python3 hco_terminal.py
 """
 
-from flask import Flask, render_template_string, redirect, url_for, send_file, request
-import threading
-import subprocess
-import shutil
-import time
-import webbrowser
-import os
-import sys
-from datetime import datetime
-from io import BytesIO
+from flask import Flask, render_template_string
+import threading, subprocess, shutil, time, webbrowser, os, sys
 
-# ------------------------
-# Configuration - Edit these
-# ------------------------
+# ---------- Config (edit your links) ----------
 APP_NAME = "HCO Terminal"
-HOST = "127.0.0.1"      # keep local by default; change to "0.0.0.0" to expose on LAN
+HOST = "127.0.0.1"
 PORT = 8080
 
-# Community links - replace with your actual invite links where needed
-WHATSAPP_LINK = "https://chat.whatsapp.com/BHwZHVntVicI8zdmfbJoQV?mode=wwt"  # REPLACE with your real invite
 TELEGRAM_LINK = "https://t.me/HackersColony"
-YOUTUBE_LINK = "https://youtube.com/@hackers_colony_tech?si=51CiCi_q1_CwiTnc"
+WHATSAPP_LINK = "https://chat.whatsapp.com/BHwZHVntVicI8zdmfbJoQV"
+YOUTUBE_LINK  = "https://youtube.com/@hackers_colony_tech?si=51CiCi_q1_CwiTnc"
+WEBSITE_LINK  = "https://hackerscolonyofficial.blogspot.com/?m=1"
+LEARN_LINK    = "https://tryhackme.com"   # example learning link
 
-OPEN_TIMEOUT = 0.8  # seconds to wait before trying to open browser
-JOIN_LOG = "join_clicks.log"  # local file to store join clicks
-
-# ------------------------
-# Flask app and templates
-# ------------------------
+# ---------- Flask app ----------
 app = Flask(__name__)
 
-MAIN_HTML = """
-<!doctype html>
+HTML = f"""<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>{app_name} — Hacking Portal</title>
-  <style>
-    :root {{ --bg:#071126; --card:#0f1720; --accent:#ff4d4d; --muted:#9aa5b1; --glass: rgba(255,255,255,0.03); }}
-    html,body{{height:100%;margin:0;padding:0;background:linear-gradient(180deg,#071126,#021018);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;color:#e6eef6}}
-    .wrap{{max-width:980px;margin:18px auto;padding:18px}}
-    header{{display:flex;align-items:center;gap:14px}}
-    .logo{{width:64px;height:64px;border-radius:12px;background:var(--glass);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:24px}}
-    h1{{margin:0;font-size:20px}}
-    .lead{{color:var(--muted);margin-top:6px}}
-    .card{{background:rgba(255,255,255,0.03);padding:18px;border-radius:12px;margin-top:16px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}}
-    .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:12px}}
-    .btn{{display:block;padding:14px;border-radius:10px;text-decoration:none;color:white;font-weight:700;text-align:center;background:linear-gradient(90deg,var(--accent),#fb8b24)}}
-    a{{color:inherit}}
-    .subtitle{{color:var(--muted);font-size:13px;margin-top:12px}}
-    footer{{color:var(--muted);margin-top:18px;font-size:13px;text-align:center}}
-    ul.links{{padding-left:18px}}
-    .small{{font-size:13px;color:var(--muted)}}
-    .join-grid{{display:flex;flex-direction:column;gap:8px;margin-top:12px}}
-    .join-btn{{display:inline-block;padding:10px;border-radius:10px;text-decoration:none;color:#0b1220;font-weight:700;text-align:center;background:#fff}}
-    .inline-link{{display:inline-block;margin-right:8px;padding:8px 12px;border-radius:10px;background:#0f1720;color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,0.04)}}
-    @media (max-width:420px){{ .wrap{{padding:12px}} }}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>{APP_NAME} — Hackers Colony Portal</title>
+<link rel="icon" href="data:,">
+<style>
+  /* Reset */
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  html,body{{height:100%}}
+  body {{
+    font-family: Inter, "Segoe UI", Roboto, system-ui, -apple-system, sans-serif;
+    background: radial-gradient(1200px 600px at 10% 10%, #07102a 0%, #02020a 35%, #000 100%);
+    color:#e6eef6;
+    -webkit-font-smoothing:antialiased;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }}
+
+  .panel {{
+    width:100%;
+    max-width:980px;
+    border-radius:16px;
+    padding:28px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    box-shadow: 0 10px 40px rgba(2,6,23,0.7), inset 0 1px 0 rgba(255,255,255,0.02);
+    backdrop-filter: blur(6px);
+  }}
+
+  .top {{
+    display:flex;
+    align-items:center;
+    gap:18px;
+  }}
+  .badge {{
+    width:72px;height:72px;border-radius:14px;
+    display:flex;align-items:center;justify-content:center;
+    background: linear-gradient(135deg,#09182b,#05283a);
+    box-shadow: 0 6px 20px rgba(0,170,150,0.08);
+    position:relative;
+    overflow:hidden;
+  }}
+  .badge:after{{
+    content:"";
+    position:absolute;left:-30px;top:-20px;width:140px;height:140px;
+    background:radial-gradient(circle at 30% 30%, rgba(0,255,170,0.06), transparent 30%);
+    transform:rotate(20deg);
+  }}
+  .logo-text{{font-weight:800;color:#00ffd6;font-size:20px;text-shadow:0 0 8px rgba(0,255,214,0.06)}}
+
+  h1{{font-size:20px;color:#00ffd6;margin:0}}
+  p.lead{{color:#9fb3c2;margin-top:6px}}
+
+  .grid {{
+    display:grid;
+    grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
+    gap:14px;
+    margin-top:20px;
+  }}
+
+  .card {{
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    padding:18px;border-radius:12px;border:1px solid rgba(255,255,255,0.02);
+    transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+    cursor:pointer;
+  }}
+  .card:hover{{ transform: translateY(-6px); box-shadow: 0 12px 30px rgba(0,255,180,0.06); background: rgba(255,255,255,0.03)}}
+  .card h3{{margin-bottom:8px;color:#e8fffb}}
+  .card p{{color:#9fb3c2;font-size:14px;line-height:1.45}}
+
+  .cta-row{{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px;align-items:center}}
+  .btn {{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:12px 16px;border-radius:12px;text-decoration:none;
+    font-weight:700;color:#071025;background:#00ffd6;border:none;cursor:pointer;
+    box-shadow:0 10px 30px rgba(0,255,214,0.06);
+    transition: transform .14s ease, box-shadow .14s ease, opacity .14s;
+  }}
+  .btn.ghost{{background:transparent;color:#9fb3c2;border:1px solid rgba(255,255,255,0.03)}}
+  .btn:hover{{transform:translateY(-4px)}}
+
+  .links { margin-top:18px; display:flex; gap:10px; flex-wrap:wrap; }
+  .links a { text-decoration:none; padding:10px 12px; border-radius:10px; background: rgba(255,255,255,0.02); color:#cfeeea; font-weight:700; }
+
+  footer { margin-top:22px; color:#7f9aa3; font-size:13px; text-align:center; }
+
+  /* floating glow */
+  .glow {{
+    position:absolute;right:28px;top:28px;width:220px;height:220px;border-radius:50%;
+    filter: blur(60px); opacity:0.25; background: radial-gradient(circle,#00ffd6 0%, transparent 40%);
+    transform: translateZ(0);
+  }}
+
+  @media (max-width:560px) {{
+    .top {{flex-direction:row;gap:12px}}
+    .badge{{width:56px;height:56px}}
+  }}
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div class="logo">HCO</div>
-      <div>
-        <h1>{app_name} — Hacking Portal</h1>
-        <p class="lead">A safe starting place to learn ethical hacking & practice in legal, isolated labs.</p>
-      </div>
-    </header>
-
-    <div class="card">
-      <div style="background:#2b2f36;padding:10px;border-radius:8px;color:#ffd7d7"><strong>Ethical Use Only:</strong>
-      Practice only on systems you own or have explicit permission to test. Illegal activity is not supported.</div>
-
-      <div class="grid">
-        <a class="btn" href="/learn">📚 Learn Hacking</a>
-        <a class="btn" href="/labs">🧪 Practice Labs</a>
-        <a class="btn" href="/tutorials">🎯 Tutorials</a>
-        <a class="btn" href="/tools">🛠 Tools & Guides</a>
-        <a class="btn" href="/ctf">🏁 CTF / Exercises</a>
-      </div>
-
-      <p class="subtitle">Tip: Use TryHackMe, Hack The Box, or local isolated VMs (Metasploitable, Juice Shop). Keep practice networks isolated.</p>
-
-      <div style="margin-top:14px">
-        <h3>Join our community</h3>
-        <div class="join-grid">
-          <a class="join-btn" href="/join/whatsapp" target="_blank">🔗 Join WhatsApp Group</a>
-          <a class="join-btn" href="/join/telegram" target="_blank">🔗 Join Telegram</a>
-          <a class="join-btn" href="/join/youtube" target="_blank">▶ Subscribe on YouTube</a>
+  <div class="panel">
+    <div style="position:relative">
+      <div class="glow"></div>
+      <div class="top">
+        <div class="badge"><div class="logo-text">HCO</div></div>
+        <div style="flex:1">
+          <h1>Welcome to Hackers Colony — Hacking Portal</h1>
+          <p class="lead">Ethical learning, practice labs & community | Only test on systems you own or have permission to test.</p>
         </div>
-        <p class="small" style="margin-top:8px;">Tapping these links will open the corresponding app if installed or open the link in your browser.</p>
       </div>
-    </div>
 
-    <div class="card">
-      <h3>Quick links</h3>
-      <ul class="links">
-        <li><a class="inline-link" href="https://tryhackme.com" target="_blank">TryHackMe</a>
-            <a class="inline-link" href="https://www.hackthebox.com" target="_blank">HackTheBox</a>
-            <a class="inline-link" href="https://owasp.org" target="_blank">OWASP</a></li>
-        <li style="margin-top:10px"><a href="/download/cheatsheet">Download beginner cheat-sheet (text)</a></li>
-      </ul>
-      <p class="small">Made with ❤ by Hackers Colony — For education only.</p>
-    </div>
+      <div class="grid" style="margin-top:20px">
+        <div class="card" onclick="location.href='/learn'">
+          <h3>📚 Learn Hacking</h3>
+          <p>Guided learning path, foundational topics and recommended courses.</p>
+        </div>
 
-    <footer>{app_name} — Run in Termux: <code>python3 hco_terminal.py</code></footer>
+        <div class="card" onclick="location.href='/labs'">
+          <h3>🧪 Practice Labs</h3>
+          <p>Start safe labs (TryHackMe, Juice Shop) and local vulnerable VMs in isolated environments.</p>
+        </div>
+
+        <div class="card" onclick="location.href='/tutorials'">
+          <h3>🎯 Tutorials</h3>
+          <p>Step-by-step tutorials and curated YouTube lessons to follow along.</p>
+        </div>
+
+        <div class="card" onclick="location.href='/tools'">
+          <h3>🛠 Tools & Guides</h3>
+          <p>Learn how to use Nmap, Wireshark, Burp, and defensive tooling responsibly.</p>
+        </div>
+
+        <div class="card" onclick="location.href='/ctf'">
+          <h3>🏁 CTF Exercises</h3>
+          <p>Beginner CTFs, challenges and walkthroughs to build practical skills.</p>
+        </div>
+      </div>
+
+      <div class="cta-row">
+        <a class="btn" href="/join/telegram" target="_blank">Join Telegram</a>
+        <a class="btn" href="/join/whatsapp" target="_blank" style="background:#25D366;color:#02120b">Join WhatsApp</a>
+        <a class="btn ghost" href="/join/youtube" target="_blank">Watch Tutorials</a>
+        <a class="btn ghost" href="{WEBSITE_LINK}" target="_blank">Official Website</a>
+      </div>
+
+      <div class="links">
+        <a href="/download/cheatsheet">Download Cheat-sheet</a>
+        <a href="/contact">Contact</a>
+      </div>
+
+      <footer>Made with ❤️ by Hackers Colony — Educational & ethical use only.</footer>
+    </div>
   </div>
+
+<script>
+  // tiny animation: pulse glow
+  const glow = document.querySelector('.glow');
+  let tick = 0;
+  setInterval(()=>{ tick += 0.02; glow.style.opacity = 0.18 + Math.sin(tick)*0.03; }, 50);
+</script>
 </body>
 </html>
-""".format(app_name=APP_NAME)
-
-LEARN_HTML = """
-<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Learn Hacking</title></head>
-<body style="background:#071126;color:#e6eef6;font-family:system-ui;padding:18px">
-<h2>Learn Hacking — Safe Resources</h2>
-<ul>
-<li><a href="https://tryhackme.com" target="_blank">TryHackMe — Guided hands-on learning</a></li>
-<li><a href="https://www.hackthebox.com" target="_blank">Hack The Box — Practice labs</a></li>
-<li><a href="https://owasp.org" target="_blank">OWASP — Web app security</a></li>
-<li><a href="https://developer.mozilla.org" target="_blank">MDN — Web fundamentals</a></li>
-</ul>
-<hr>
-<h3>Beginner checklist</h3>
-<ol>
-<li>Create accounts on TryHackMe / HackTheBox.</li>
-<li>Learn HTTP basics (GET/POST) and HTML forms.</li>
-<li>Practice safe labs inside a VM or cloud instance you control.</li>
-</ol>
-<p><a href="/">← Back</a></p></body></html>
 """
 
-LABS_HTML = """
-<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Labs</title></head>
-<body style="background:#071126;color:#e6eef6;font-family:system-ui;padding:18px">
-<h2>Practice Labs — Safe Options</h2>
-<ol>
-<li>TryHackMe / HackTheBox (online, legal CTF platforms)</li>
-<li>OWASP Juice Shop — run locally (Docker recommended)</li>
-<li>Vulnerable VM images (Metasploitable) inside VirtualBox/VMware</li>
-</ol>
-
-<h3>Quick lab commands</h3>
-<ul>
-<li>Run Juice Shop via Docker: <code>docker run --rm -p 3000:3000 bkimminich/juice-shop</code></li>
-<li>Download Metasploitable (run in isolated VM)</li>
-<li>Start a browser and point to local lab URLs</li>
-</ul>
-
-<p><a href="/">← Back</a></p></body></html>
-"""
-
-TUTORIALS_HTML = """
-<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tutorials</title></head>
-<body style="background:#071126;color:#e6eef6;font-family:system-ui;padding:18px">
-<h2>Tutorials</h2>
-<ul>
-<li>Web security fundamentals — Cross-Site Scripting, SQLi</li>
-<li>Network basics & packet capture (Wireshark)</li>
-<li>Secure coding & defensive practices</li>
-</ul>
-
-<h3>Sample study plan (4 weeks)</h3>
-<ol>
-<li>Week 1: Networking & Linux basics</li>
-<li>Week 2: Web fundamentals and HTTP</li>
-<li>Week 3: Web vulns (XSS, SQLi) on Juice Shop</li>
-<li>Week 4: CTF practice & writeups</li>
-</ol>
-
-<p><a href="/">← Back</a></p></body></html>
-"""
-
-TOOLS_HTML = """
-<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tools</title></head>
-<body style="background:#071126;color:#e6eef6;font-family:system-ui;padding:18px">
-<h2>Tools & Guides</h2>
-<ul>
-<li><strong>nmap</strong> — network discovery (only with permission)</li>
-<li><strong>Wireshark</strong> — packet analysis (learn on test captures)</li>
-<li><strong>Python, Git</strong> — scripting & code management</li>
-</ul>
-
-<h3>Example commands</h3>
-<ul>
-<li>Simple nmap: <code>nmap -sC -sV TARGET</code></li>
-<li>Save web page: <code>wget -k -p http://target/</code></li>
-</ul>
-
-<p><a href="/">← Back</a></p></body></html>
-"""
-
-CTF_HTML = """
-<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>CTF</title></head>
-<body style="background:#071126;color:#e6eef6;font-family:system-ui;padding:18px">
-<h2>CTF / Exercises</h2>
-<p>Begin with easy rooms on TryHackMe. Explore:</p>
-<ul>
-<li>Web exploitation (beginner)</li>
-<li>Forensics & steganography</li>
-<li>Crypto & reversing (intro)</li>
-</ul>
-
-<h3>Start a simple challenge locally</h3>
-<p>Use Juice Shop Docker instance and try to find simple flags on the app.</p>
-
-<p><a href="/">← Back</a></p></body></html>
-"""
-
-REDIRECTING_HTML = """
+# ---------- Subpages templates ----------
+SUB_TEMPLATE = """
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Redirecting…</title>
-<style>body{{background:#071126;color:#e6eef6;font-family:system-ui;padding:18px}}</style>
-</head>
+<style>body{{font-family:Inter,system-ui;background:#020615;color:#e6eef6;padding:22px}}a{{color:#00ffd6}}</style></head>
 <body>
-  <h3>Opening external link…</h3>
-  <p>If the link doesn't open automatically, <a id="link" href="{target}" target="_blank">click here</a>.</p>
-  <script>
-    // try to open immediately
-    window.location.href = "{target}";
-  </script>
+  <h2>{title}</h2>
+  <div>{html}</div>
+  <p style="margin-top:18px"><a href="/">← Back to Portal</a></p>
 </body></html>
 """
 
-CHEATSHEET_TEXT = """HCO Terminal - Beginner cheat-sheet
+CHEATSHEET_TEXT = """HCO Terminal - Beginner Cheat-sheet
 
 1) Start Juice Shop (Docker):
    docker run --rm -p 3000:3000 bkimminich/juice-shop
 
-2) Useful nmap:
+2) Simple nmap:
    nmap -sC -sV <target>
 
 3) Save a web page:
    wget -k -p http://<target>/
 
-4) Keep everything in an isolated VM or sandbox.
+4) Always use isolated VMs or cloud hosts you control.
 5) Only test systems you own or have permission to test.
 """
 
-# ------------------------
-# Routes
-# ------------------------
+# ---------- Routes ----------
+from flask import send_file, request, redirect, url_for, render_template_string
+from io import BytesIO
+import json
+JOIN_LOG = "join_clicks.log"
+
 @app.route("/")
-def index():
-    return MAIN_HTML
+def home():
+    return render_template_string(HTML)
 
 @app.route("/learn")
 def learn():
-    return LEARN_HTML
+    html = "<p>Recommended start: TryHackMe beginner path, networking basics, Linux commands, HTTP fundamentals.</p>"
+    html += "<ul><li><a href='https://tryhackme.com' target='_blank'>TryHackMe</a></li><li><a href='https://developer.mozilla.org' target='_blank'>MDN Web Docs</a></li></ul>"
+    return render_template_string(SUB_TEMPLATE.format(title="Learn Hacking", html=html))
 
 @app.route("/labs")
 def labs():
-    return LABS_HTML
+    html = "<p>Run Juice Shop locally with Docker or use TryHackMe/HackTheBox labs. Example:</p><pre>docker run --rm -p 3000:3000 bkimminich/juice-shop</pre>"
+    return render_template_string(SUB_TEMPLATE.format(title="Practice Labs", html=html))
 
 @app.route("/tutorials")
 def tutorials():
-    return TUTORIALS_HTML
+    html = "<p>Curated playlists and hands-on walkthroughs. <a href='{0}' target='_blank'>YouTube Channel</a></p>".format(YOUTUBE_LINK)
+    return render_template_string(SUB_TEMPLATE.format(title="Tutorials", html=html))
 
 @app.route("/tools")
 def tools():
-    return TOOLS_HTML
+    html = "<p>Overview of useful tools: <strong>nmap</strong>, <strong>wireshark</strong>, <strong>burp</strong>. Always use safely.</p>"
+    return render_template_string(SUB_TEMPLATE.format(title="Tools & Guides", html=html))
 
 @app.route("/ctf")
 def ctf():
-    return CTF_HTML
+    html = "<p>Start with beginner CTFs on TryHackMe. Practice web, forensics, and crypto categories.</p>"
+    return render_template_string(SUB_TEMPLATE.format(title="CTF / Exercises", html=html))
 
 @app.route("/download/cheatsheet")
 def download_cheatsheet():
-    # serve a small text file for quick download
     bio = BytesIO()
-    bio.write(CHEATSHEET_TEXT.encode("utf-8"))
+    bio.write(CHEATSHEET_TEXT.encode('utf-8'))
     bio.seek(0)
-    return send_file(bio, as_attachment=True, download_name="hco_cheatsheet.txt", mimetype="text/plain")
+    return send_file(bio, download_name="hco_cheatsheet.txt", as_attachment=True, mimetype="text/plain")
 
-# Join redirect endpoints (ensures link is present and logged)
-def log_join(platform: str, target: str):
+def log_join(platform, target):
     try:
         with open(JOIN_LOG, "a") as f:
-            f.write(f"{datetime.utcnow().isoformat()} JOIN {platform} -> {target} | from: {request.remote_addr}\\n")
+            f.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} JOIN {platform} -> {target} from {request.remote_addr}\\n")
     except Exception:
         pass
 
 @app.route("/join/<platform>")
 def join(platform):
-    # safe map
     platform = platform.lower()
     if platform == "telegram":
         target = TELEGRAM_LINK
     elif platform == "whatsapp":
         target = WHATSAPP_LINK
-    elif platform in ("youtube", "yt"):
+    elif platform in ("youtube","yt"):
         target = YOUTUBE_LINK
     else:
-        # unknown -> back to home
-        return redirect(url_for("index"))
-    # log and redirect via a redirecting page (helps mobile open apps)
+        return redirect(url_for("home"))
     try:
         log_join(platform, target)
     except Exception:
         pass
-    return render_template_string(REDIRECTING_HTML.format(target=target))
+    # Use a tiny redirect HTML so mobile apps can pick the link
+    redirect_html = f"""
+    <!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>
+    <title>Opening…</title></head><body style='background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh'>
+    <script>window.location.replace("{target}");</script>
+    <div style='text-align:center'><p>Opening {platform}…</p><p><a href='{target}' target='_blank'>Click here if not redirected</a></p></div>
+    </body></html>
+    """
+    return redirect_html
 
-# ------------------------
-# Helpers to open the URL on Android/Termux
-# ------------------------
-def open_url_on_android(url: str) -> bool:
-    """
-    Try to open URL using:
-      1) termux-open-url (preferred on Termux)
-      2) am start (Android intent)
-      3) webbrowser fallback
-    Returns True if an attempt was made.
-    """
+# ---------- Open URL helper (Termux friendly) ----------
+def open_url(url):
     # 1) termux-open-url
     if shutil.which("termux-open-url"):
         try:
@@ -337,77 +304,49 @@ def open_url_on_android(url: str) -> bool:
             return True
         except Exception:
             pass
-    # 2) am start (Activity Manager)
+    # 2) Android am
     if shutil.which("am"):
         try:
             subprocess.run(["am", "start", "-a", "android.intent.action.VIEW", "-d", url], check=False)
             return True
         except Exception:
             pass
-    # 3) webbrowser fallback
+    # 3) fallback
     try:
         webbrowser.open(url)
         return True
     except Exception:
         return False
 
-# ------------------------
-# Server start
-# ------------------------
-def run_server(host: str, port: int):
-    app.run(host=host, port=port, debug=False, threaded=True)
+# ---------- Server runner ----------
+def run_server():
+    # Serve on localhost by default
+    app.run(host=HOST, port=PORT, debug=False, threaded=True)
 
-def start_and_open(host: str = HOST, port: int = PORT):
-    url = f"http://{host}:{port}/"
-    thread = threading.Thread(target=run_server, args=(host, port), daemon=True)
+def start():
+    url = f"http://{HOST}:{PORT}/"
+    thread = threading.Thread(target=run_server, daemon=True)
     thread.start()
-    time.sleep(OPEN_TIMEOUT)
+    # give server a moment
+    time.sleep(0.8)
     print(f"[+] {APP_NAME} running at {url}")
-    tried = open_url_on_android(url)
-    if tried:
-        print("[+] Attempted to open your browser/app. If nothing opened, copy the URL below into your browser:")
+    opened = open_url(url)
+    if opened:
+        print("[+] Attempted to open your browser/app. If nothing opened, copy the URL below to your browser:")
     else:
-        print("[!] Could not open browser automatically. Please open the URL manually:")
-    print(f"    {url}")
-    print("[i] Press Ctrl+C to stop the portal.")
+        print("[!] Could not open browser automatically. Open this URL in your browser:")
+    print("    " + url)
 
-# ------------------------
-# Simple dependency check and CLI
-# ------------------------
-def check_dependencies() -> bool:
+if __name__ == "__main__":
+    os.system("clear")
+    print(f"Starting {APP_NAME} — Hackers Colony Portal")
+    if not shutil.which("python") and not shutil.which("python3"):
+        print("[!] Warning: 'python' not found in PATH")
+    start()
     try:
-        import flask  # noqa: F401
-    except Exception:
-        print("[!] Flask is not installed. Install with: pip install flask")
-        return False
-    return True
-
-def print_header():
-    print("=" * 58)
-    print(f"{APP_NAME} — Single-file portal (Educational use only)")
-    print("Author: Hackers Colony (Azhar)")
-    print("=" * 58)
-
-def main():
-    print_header()
-    if not check_dependencies():
-        sys.exit(1)
-
-    host = HOST
-    port = PORT
-    # allow exposing on LAN with CLI option
-    if len(sys.argv) > 1 and "--host" in sys.argv and "0.0.0.0" in sys.argv:
-        host = "0.0.0.0"
-        print("[!] Binding to 0.0.0.0 - portal will be accessible on your LAN (use with caution).")
-
-    try:
-        start_and_open(host, port)
-        # keep alive
+        # keep main thread alive
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n[+] Shutting down HCO Terminal. Bye.")
-        os._exit(0)
-
-if __name__ == "__main__":
-    main()
+        print("\nShutting down. Bye.")
+        sys.exit(0)
