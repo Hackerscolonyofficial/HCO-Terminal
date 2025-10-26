@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-HCO Terminal (single-file) — v1.1
+HCO Terminal (single-file) — v1.2
 Author: Azhar (Hackers Colony)
-Filename suggestion: hco_terminal.py
-Description:
-    - Single-file Flask portal to run in Termux (or any Python environment)
-    - Automatically attempts to open mobile browser to the local portal
-    - Starts a small site with:
-        * Welcome banner / ethical disclaimer
-        * Large action buttons (Learn, Labs, Tutorials, Tools, CTF)
-        * Clickable join links: WhatsApp group, Telegram group, (optional) YouTube
-    - Configurable links at the top of this file
-    - Intended for legal / educational purposes only
+Filename: hco_terminal.py
+
+Improvements in v1.2:
+ - Join links use redirect endpoints (/join/telegram, /join/whatsapp, /join/youtube)
+ - Join clicks are logged to join_clicks.log
+ - Pages contain more actionable items (buttons, sample commands, downloadable cheat-sheet)
+ - All in a single file for GitHub
 
 Usage (Termux):
     pkg update && pkg install python
     pip install flask
     python3 hco_terminal.py
-
-License: MIT (short header included)
 """
 
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, redirect, url_for, send_file, request
 import threading
 import subprocess
 import shutil
@@ -31,6 +26,7 @@ import webbrowser
 import os
 import sys
 from datetime import datetime
+from io import BytesIO
 
 # ------------------------
 # Configuration - Edit these
@@ -39,22 +35,13 @@ APP_NAME = "HCO Terminal"
 HOST = "127.0.0.1"      # keep local by default; change to "0.0.0.0" to expose on LAN
 PORT = 8080
 
-# Community links - replace with your actual invite links
-WHATSAPP_LINK = "https://chat.whatsapp.com/BHwZHVntVicI8zdmfbJoQV?mode=wwt"
+# Community links - replace with your actual invite links where needed
+WHATSAPP_LINK = "https://chat.whatsapp.com/BHwZHVntVicI8zdmfbJoQV?mode=wwt"  # REPLACE with your real invite
 TELEGRAM_LINK = "https://t.me/HackersColony"
-YOUTUBE_LINK = "https://youtube.com/@hackers_colony_tech?si=pWiyLolJ5323Q7Or"  # optional
+YOUTUBE_LINK = "https://youtube.com/@hackers_colony_tech?si=51CiCi_q1_CwiTnc"
 
 OPEN_TIMEOUT = 0.8  # seconds to wait before trying to open browser
-
-# ------------------------
-# Minimal license text (for GitHub file)
-# ------------------------
-MIT_LICENSE_TEXT = """MIT License
-
-Copyright (c) {year} Azhar
-
-Permission is hereby granted, free of charge, to any person obtaining a copy...
-""".format(year=datetime.utcnow().year)
+JOIN_LOG = "join_clicks.log"  # local file to store join clicks
 
 # ------------------------
 # Flask app and templates
@@ -86,6 +73,7 @@ MAIN_HTML = """
     .small{{font-size:13px;color:var(--muted)}}
     .join-grid{{display:flex;flex-direction:column;gap:8px;margin-top:12px}}
     .join-btn{{display:inline-block;padding:10px;border-radius:10px;text-decoration:none;color:#0b1220;font-weight:700;text-align:center;background:#fff}}
+    .inline-link{{display:inline-block;margin-right:8px;padding:8px 12px;border-radius:10px;background:#0f1720;color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,0.04)}}
     @media (max-width:420px){{ .wrap{{padding:12px}} }}
   </style>
 </head>
@@ -116,9 +104,9 @@ MAIN_HTML = """
       <div style="margin-top:14px">
         <h3>Join our community</h3>
         <div class="join-grid">
-          <a class="join-btn" href="{whatsapp}" target="_blank">🔗 Join WhatsApp Group</a>
-          <a class="join-btn" href="{telegram}" target="_blank">🔗 Join Telegram</a>
-          <a class="join-btn" href="{youtube}" target="_blank">▶ Subscribe on YouTube</a>
+          <a class="join-btn" href="/join/whatsapp" target="_blank">🔗 Join WhatsApp Group</a>
+          <a class="join-btn" href="/join/telegram" target="_blank">🔗 Join Telegram</a>
+          <a class="join-btn" href="/join/youtube" target="_blank">▶ Subscribe on YouTube</a>
         </div>
         <p class="small" style="margin-top:8px;">Tapping these links will open the corresponding app if installed or open the link in your browser.</p>
       </div>
@@ -127,10 +115,10 @@ MAIN_HTML = """
     <div class="card">
       <h3>Quick links</h3>
       <ul class="links">
-        <li><a href="https://tryhackme.com" target="_blank">TryHackMe — Hands-on rooms</a></li>
-        <li><a href="https://owasp.org/www-project-juice-shop/" target="_blank">OWASP Juice Shop — Vulnerable web app demo</a></li>
-        <li><a href="https://www.hackthebox.com" target="_blank">Hack The Box — Practice labs</a></li>
-        <li><a href="https://developer.mozilla.org" target="_blank">MDN — Web fundamentals</a></li>
+        <li><a class="inline-link" href="https://tryhackme.com" target="_blank">TryHackMe</a>
+            <a class="inline-link" href="https://www.hackthebox.com" target="_blank">HackTheBox</a>
+            <a class="inline-link" href="https://owasp.org" target="_blank">OWASP</a></li>
+        <li style="margin-top:10px"><a href="/download/cheatsheet">Download beginner cheat-sheet (text)</a></li>
       </ul>
       <p class="small">Made with ❤ by Hackers Colony — For education only.</p>
     </div>
@@ -139,7 +127,7 @@ MAIN_HTML = """
   </div>
 </body>
 </html>
-""".format(app_name=APP_NAME, whatsapp=WHATSAPP_LINK, telegram=TELEGRAM_LINK, youtube=YOUTUBE_LINK)
+""".format(app_name=APP_NAME)
 
 LEARN_HTML = """
 <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Learn Hacking</title></head>
@@ -151,6 +139,13 @@ LEARN_HTML = """
 <li><a href="https://owasp.org" target="_blank">OWASP — Web app security</a></li>
 <li><a href="https://developer.mozilla.org" target="_blank">MDN — Web fundamentals</a></li>
 </ul>
+<hr>
+<h3>Beginner checklist</h3>
+<ol>
+<li>Create accounts on TryHackMe / HackTheBox.</li>
+<li>Learn HTTP basics (GET/POST) and HTML forms.</li>
+<li>Practice safe labs inside a VM or cloud instance you control.</li>
+</ol>
 <p><a href="/">← Back</a></p></body></html>
 """
 
@@ -160,10 +155,17 @@ LABS_HTML = """
 <h2>Practice Labs — Safe Options</h2>
 <ol>
 <li>TryHackMe / HackTheBox (online, legal CTF platforms)</li>
-<li>OWASP Juice Shop — run locally in an isolated VM or Docker</li>
-<li>Vulnerable VM images (Metasploitable) in an isolated host or VM</li>
+<li>OWASP Juice Shop — run locally (Docker recommended)</li>
+<li>Vulnerable VM images (Metasploitable) inside VirtualBox/VMware</li>
 </ol>
-<p><strong>Note:</strong> Always isolate vulnerable services from your main network.</p>
+
+<h3>Quick lab commands</h3>
+<ul>
+<li>Run Juice Shop via Docker: <code>docker run --rm -p 3000:3000 bkimminich/juice-shop</code></li>
+<li>Download Metasploitable (run in isolated VM)</li>
+<li>Start a browser and point to local lab URLs</li>
+</ul>
+
 <p><a href="/">← Back</a></p></body></html>
 """
 
@@ -172,10 +174,19 @@ TUTORIALS_HTML = """
 <body style="background:#071126;color:#e6eef6;font-family:system-ui;padding:18px">
 <h2>Tutorials</h2>
 <ul>
-<li>Web security fundamentals</li>
+<li>Web security fundamentals — Cross-Site Scripting, SQLi</li>
 <li>Network basics & packet capture (Wireshark)</li>
 <li>Secure coding & defensive practices</li>
 </ul>
+
+<h3>Sample study plan (4 weeks)</h3>
+<ol>
+<li>Week 1: Networking & Linux basics</li>
+<li>Week 2: Web fundamentals and HTTP</li>
+<li>Week 3: Web vulns (XSS, SQLi) on Juice Shop</li>
+<li>Week 4: CTF practice & writeups</li>
+</ol>
+
 <p><a href="/">← Back</a></p></body></html>
 """
 
@@ -184,10 +195,17 @@ TOOLS_HTML = """
 <body style="background:#071126;color:#e6eef6;font-family:system-ui;padding:18px">
 <h2>Tools & Guides</h2>
 <ul>
-<li>nmap — safe scanning (only with permission)</li>
-<li>Wireshark — packet analysis (learn on test captures)</li>
-<li>Python, Git, and web frameworks for defensive tooling</li>
+<li><strong>nmap</strong> — network discovery (only with permission)</li>
+<li><strong>Wireshark</strong> — packet analysis (learn on test captures)</li>
+<li><strong>Python, Git</strong> — scripting & code management</li>
 </ul>
+
+<h3>Example commands</h3>
+<ul>
+<li>Simple nmap: <code>nmap -sC -sV TARGET</code></li>
+<li>Save web page: <code>wget -k -p http://target/</code></li>
+</ul>
+
 <p><a href="/">← Back</a></p></body></html>
 """
 
@@ -201,7 +219,41 @@ CTF_HTML = """
 <li>Forensics & steganography</li>
 <li>Crypto & reversing (intro)</li>
 </ul>
+
+<h3>Start a simple challenge locally</h3>
+<p>Use Juice Shop Docker instance and try to find simple flags on the app.</p>
+
 <p><a href="/">← Back</a></p></body></html>
+"""
+
+REDIRECTING_HTML = """
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Redirecting…</title>
+<style>body{{background:#071126;color:#e6eef6;font-family:system-ui;padding:18px}}</style>
+</head>
+<body>
+  <h3>Opening external link…</h3>
+  <p>If the link doesn't open automatically, <a id="link" href="{target}" target="_blank">click here</a>.</p>
+  <script>
+    // try to open immediately
+    window.location.href = "{target}";
+  </script>
+</body></html>
+"""
+
+CHEATSHEET_TEXT = """HCO Terminal - Beginner cheat-sheet
+
+1) Start Juice Shop (Docker):
+   docker run --rm -p 3000:3000 bkimminich/juice-shop
+
+2) Useful nmap:
+   nmap -sC -sV <target>
+
+3) Save a web page:
+   wget -k -p http://<target>/
+
+4) Keep everything in an isolated VM or sandbox.
+5) Only test systems you own or have permission to test.
 """
 
 # ------------------------
@@ -230,6 +282,42 @@ def tools():
 @app.route("/ctf")
 def ctf():
     return CTF_HTML
+
+@app.route("/download/cheatsheet")
+def download_cheatsheet():
+    # serve a small text file for quick download
+    bio = BytesIO()
+    bio.write(CHEATSHEET_TEXT.encode("utf-8"))
+    bio.seek(0)
+    return send_file(bio, as_attachment=True, download_name="hco_cheatsheet.txt", mimetype="text/plain")
+
+# Join redirect endpoints (ensures link is present and logged)
+def log_join(platform: str, target: str):
+    try:
+        with open(JOIN_LOG, "a") as f:
+            f.write(f"{datetime.utcnow().isoformat()} JOIN {platform} -> {target} | from: {request.remote_addr}\\n")
+    except Exception:
+        pass
+
+@app.route("/join/<platform>")
+def join(platform):
+    # safe map
+    platform = platform.lower()
+    if platform == "telegram":
+        target = TELEGRAM_LINK
+    elif platform == "whatsapp":
+        target = WHATSAPP_LINK
+    elif platform in ("youtube", "yt"):
+        target = YOUTUBE_LINK
+    else:
+        # unknown -> back to home
+        return redirect(url_for("index"))
+    # log and redirect via a redirecting page (helps mobile open apps)
+    try:
+        log_join(platform, target)
+    except Exception:
+        pass
+    return render_template_string(REDIRECTING_HTML.format(target=target))
 
 # ------------------------
 # Helpers to open the URL on Android/Termux
@@ -267,7 +355,6 @@ def open_url_on_android(url: str) -> bool:
 # Server start
 # ------------------------
 def run_server(host: str, port: int):
-    # Note: debug=False to avoid auto-reloader spawning multiple threads
     app.run(host=host, port=port, debug=False, threaded=True)
 
 def start_and_open(host: str = HOST, port: int = PORT):
